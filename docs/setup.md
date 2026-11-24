@@ -130,7 +130,50 @@ The default desktop is IceWM (`config/systemd/icewm-glamor.service`). Xfce fits 
 
 Kernel-side settings now in use: `coherent_pool=6M` (`config/kboot.conf`; at 2M the boot framebuffer didn't fit and the console stayed blank until X), the GPU pool at 48 MB (`config/modprobe/xegpu.conf`; dEQP's 2048x2048 mipmapped texture no longer fits), and `scripts/slab-trim` (`config/systemd/slab-trim.service`), which turns off per-CPU slab partials: unreclaimable slab 66 -> 52 MB on the 64 KB kernel.
 
+sysctl.conf:
+```
+# --- Memory / swap (biggest wins on 512MB) ---
+vm.swappiness = 100            # with zram/zswap, swapping is cheap; prefer it over dropping page cache
+vm.vfs_cache_pressure = 100    # keep default; raise to 150 if dentry/inode cache bloats
+vm.page-cluster = 0            # no swap readahead for zram/zswap (random access, compressed)
+vm.min_free_kbytes = 8192      # ~8MB reserve; avoids atomic alloc failures (NIC, USB) without wasting RAM
+vm.overcommit_memory = 1       # helps fork-heavy/JIT/miners; use 0 if you prefer OOM safety
+vm.watermark_scale_factor = 20 # smaller reclaim gap on a small-RAM box
+vm.dirty_background_ratio = 3  # ~15MB; start writeback early (slow SD/HDD/USB)
+vm.dirty_ratio = 10            # ~50MB cap so a writer can't hog RAM
+vm.dirty_expire_centisecs = 1500
+vm.dirty_writeback_centisecs = 500
+vm.panic_on_oom = 0
+vm.oom_kill_allocating_task = 0
+
+# --- Scheduler (6 slow in-order-ish threads) ---
+kernel.sched_autogroup_enabled = 0
+kernel.pid_max = 32768
+
+# --- Network (100Mbit/1Gb NIC, little RAM: keep buffers small) ---
+net.core.rmem_max = 1048576
+net.core.wmem_max = 1048576
+net.core.rmem_default = 131072
+net.core.wmem_default = 131072
+net.ipv4.tcp_rmem = 4096 87380 1048576
+net.ipv4.tcp_wmem = 4096 16384 1048576
+net.core.netdev_max_backlog = 1000
+net.core.somaxconn = 256
+net.ipv4.tcp_fastopen = 3
+net.ipv4.tcp_mtu_probing = 1
+net.ipv4.tcp_slow_start_after_idle = 0
+net.ipv4.tcp_congestion_control = cubic
+
+# --- Misc ---
+fs.inotify.max_user_watches = 16384
+fs.file-max = 65536
+kernel.printk = 3 4 1 3
+kernel.panic = 10
+```
+
 ### 4 KB-page kernel
+
+**Note 24 November 2026: 4kb pages works OK. Boot artifact is arch/powerpc/boot/zImage.xenon**
 
 A kernel with `CONFIG_PPC_4K_PAGES=y` (and `CONFIG_LEGACY_PTYS` off) leaves about 294 MB available with the desktop, against about 200 MB with 64 KB pages; unreclaimable slab falls to 14 MB. Build it from a separate copy of the tree with the same patches, and package it as `zImage.xenon` does, or Xell can't boot it: the raw vmlinux is ELF64 with a 0xc000000000000000 entry point, and the staged 4K kernel of 10-26 "died early" only because it was that raw file.
 
