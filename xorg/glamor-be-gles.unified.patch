@@ -1,0 +1,58 @@
+--- a/glamor/glamor.c
++++ b/glamor/glamor.c
+@@ -498,6 +498,13 @@
+         glDeleteTextures(1, &tex);
+         glDeleteFramebuffers(1, &fbo);
+
++#if X_BYTE_ORDER == X_BIG_ENDIAN
++        /* Mesa reports GLES-valid BGRA/UNSIGNED_BYTE for these on big-endian
++         * (dEQP); it still reads BGRA/8_8_8_8_REV directly */
++        if (!texture_only && type == GL_UNSIGNED_INT_8_8_8_8_REV &&
++            read_format == format && read_type == GL_UNSIGNED_BYTE)
++            read_type = type;
++#endif
+         if (!texture_only && (format != read_format || type != read_type)) {
+             ErrorF("glamor: Implementation returned 0x%x/0x%x read format/type "
+                    "for depth %d, expected 0x%x/0x%x.  "
+@@ -577,11 +584,19 @@
+                       GL_RGB, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, TRUE);
+
+     if (glamor_priv->is_gles) {
+root@puffy:~/sysroot-sources/xorg-server-21.1.26# cat ~/glamor-be-gles.unified.patch
+--- a/glamor/glamor.c
++++ b/glamor/glamor.c
+@@ -498,6 +498,13 @@
+         glDeleteTextures(1, &tex);
+         glDeleteFramebuffers(1, &fbo);
+
++#if X_BYTE_ORDER == X_BIG_ENDIAN
++        /* Mesa reports GLES-valid BGRA/UNSIGNED_BYTE for these on big-endian
++         * (dEQP); it still reads BGRA/8_8_8_8_REV directly */
++        if (!texture_only && type == GL_UNSIGNED_INT_8_8_8_8_REV &&
++            read_format == format && read_type == GL_UNSIGNED_BYTE)
++            read_type = type;
++#endif
+         if (!texture_only && (format != read_format || type != read_type)) {
+             ErrorF("glamor: Implementation returned 0x%x/0x%x read format/type "
+                    "for depth %d, expected 0x%x/0x%x.  "
+@@ -577,11 +584,19 @@
+                       GL_RGB, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, TRUE);
+
+     if (glamor_priv->is_gles) {
+-        assert(X_BYTE_ORDER == X_LITTLE_ENDIAN);
++#if X_BYTE_ORDER == X_BIG_ENDIAN
++        /* Big-endian GLES (Xbox 360 Xenos + Mesa freedreno): ARGB32 words are
++         * BGRA/8_8_8_8_REV, which the Mesa build accepts in GLES on big-endian. */
++        glamor_add_format(screen, 24, PICT_x8r8g8b8,
++                          GL_BGRA, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, TRUE);
++        glamor_add_format(screen, 32, PICT_a8r8g8b8,
++                          GL_BGRA, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, TRUE);
++#else
+         glamor_add_format(screen, 24, PICT_x8r8g8b8,
+                           GL_BGRA, GL_BGRA, GL_UNSIGNED_BYTE, TRUE);
+         glamor_add_format(screen, 32, PICT_a8r8g8b8,
+                           GL_BGRA, GL_BGRA, GL_UNSIGNED_BYTE, TRUE);
++#endif
+     } else {
+         glamor_add_format(screen, 24, PICT_x8r8g8b8,
+                           GL_RGBA, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, TRUE);
